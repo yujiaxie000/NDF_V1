@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 
 def oriPlot(L):
-    print('L', L)
     for aSlice in L:
         x = []
         y = []

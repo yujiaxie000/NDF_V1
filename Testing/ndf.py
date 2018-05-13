@@ -1,161 +1,149 @@
 from util import *
 from plot import *
+from collections import deque
 
 def getNDF(filename):
-    L = processInput(filename)
-    oriPlot(L)
-    L1 = sorted(L, key=lambda x:x[0][1], reverse=True)
-    L2 = sorted(L, key=lambda x:x[0][0])
-    checked = []
-    ndf = []
+	L = processInput(filename)
+	L1 = sorted(L, key=lambda x:x[0][1], reverse=True)
+	L2 = sorted(L, key=lambda x:x[0][0])
 
-    for si in L1:
-        checked.append(si)
-        for sj in L2:
-            if sj not in checked:
-                if si is not None:
-                    if si[0] != sj[0] or si[1] != sj[1]:
-                        while si is not None:
-                            s_ndf,s_r = intercept(si, sj)
-                            si = s_r
-                            if s_ndf is not None:
-                                ndf.append(s_ndf)
-    #myPlot(L, ndf)
-    return(ndf)
+	ndf = []
+	checked = []
 
-'''
-split s1 based on points in s2
+	for si in L1:
+		checked.append(si)
+		s_r = si
+		newNdf = []
+		for sj in L2:
+			if s_r is None:
+				break
+			elif sj not in checked:
+			#elif sj != si:
+				#print(sj, s_r, 'current')
+				covermode = coverMode(s_r, sj)
+				if covermode == 1:
+					break
+				elif covermode == 0:
+					ndf.append(s_r)
+					newNdf.append(s_r)
+				else:
+					s_ndf, s_r = intercept(s_r, sj)
 
-input:
-    si, sj -> slices
-output:
-    s_ndf: the nondominated frontier from splitting si by sj
-    s_r: the remaining slice from si after the split
-'''
+					if s_ndf is not None:
+						ndf.append(s_ndf)
+						newNdf.append(s_ndf)
+			
+		if s_r is not None:
+			ndf.append(s_r)
+			newNdf.append(s_r)
+		L2.extend(newNdf)
+		L2 = sorted(L2, key=lambda x:x[0][0])
+		print('L2', L2)
+
+
+	myPlot(L, ndf)
+	return ndf
+
 def intercept(si, sj):
-    s_ndf = []
-    s_r = si
+	# si = list(set(si))
+	# sj = list(set(sj))
+	sndf = []
+	s_r = si
+	covermode = coverMode(si,sj)
+	if covermode == 0:
+		sndf = si
+		s_r = None
+	elif covermode == 1:
+		sndf = None
+		s_r = None
+	else:
+		p_intercept = sliceIntercept(si, sj)
+		if len(p_intercept) == 0:
+			pix = between_z1(si, sj[0])
+			piy = between_z2(si, sj[-1])
+			s_ndf, s_r = split(si, pix, piy)
+			sndf.extend(s_ndf)
 
-    k = 0
 
-    while s_r is not None and len(s_r) > 0 and k <= len(sj):
-        pix = between_z1(si, sj[k])
-        piy = between_z2(si, sj[k])
-        pn = intercept2(si, sj, k)
-        print('pn', pn, pix, piy)
-        ndf = None
-        r = None
+		else:
+			for i in range(len(p_intercept)):
+				if s_r is None:
+					break
+				mode, intercept, pi = p_intercept[i]
+				if mode == 0:
+					pix = between_z1(s_r, pi)
+					s_ndf, s_r = split(s_r, pix, intercept)
+					sndf.extend(s_ndf)
+				elif mode == 1:
+					piy = between_z2(s_r, pi)
+					s_ndf, s_r = split(s_r, intercept, piy)
+					sndf.extend(s_ndf)
+	return (sndf, s_r)
 
-        if pix is not None or piy is not None:
-            if pn is not None:
-                if pix is None:
-                    ndf,r = split(si, k+1, pn, piy)
-                if piy is None:
-                    ndf,r = split(si, k+1, pix, pn)
-            else:
-                ndf,r = split(si, k+1, pix, piy)
+def between_z1(s, p): # vertical split
+	indices = inbetween(p[0], s, 0)
 
-        k += 1
-        if ndf is not None:
-            s_ndf.append(ndf)
-        s_r = r
-    return (s_ndf, s_r)
+	if indices is not None:
+		x,y = pointOnSegment(s[indices[0]], s[indices[1]], p[0], 0)
+		if y >= p[1]:
+			return (x,y)
+		elif y < p[1]:
+			return 'OPPO'
+	return None
 
-'''
-find the vertical intercept of a point and a slice (a line segment on the slice)
+def between_z2(s, p): # horizontal split
+	indices = inbetween(p[1], s, 1)
 
-input:
-    s -> a slice, list of points
-    p -> a point, tuple of z1-coordinates and z2-coordinates
-output:
-    1) a point if there is a vertical intercept, the intercepting point
-    2) None otherwise
+	if indices is not None:
+		x,y = pointOnSegment(s[indices[0]], s[indices[1]], p[1], 1)
+		if x >= p[0]:
+			return (x,y)
+		elif x < p[0]:
+			return 'OPPO'
+	return None
 
-*** can merge with between_z2
-'''
-def between_z1(s, p):
-    indices = inbetween(p[0], s, 0)
-    if indices is not None:
-        x,y = pointOnSegment(s[indices[0]], s[indices[1]], p[0], 0)
-        if y > p[1]:
-            return (x,y)
-        else:
-            return None
-    else:
-        return None
+def intercept2(si, pj0, pj1):
+	intercept = None
+	i = 0
+	pi0 = None
+	pi1 = None
+	mi = None
+	while i < len(si)-1 and intercept is None:
+		pi0 = si[i]
+		pi1 = si[i+1]
+		intercept = getIntercept(pi0, pi1, pj0, pj1)
+		i += 1
+	if intercept is not None:
+		mi = getLineExpression(pi0, pi1)[0]
+	return (intercept, mi)
 
-'''
-find the horizontal intercept of a point and a slice (a line segment on the slice)
+def split(s, px=None, py=None):
+	s_ndf = None
+	s_r = None
 
-input:
-    s -> a slice, list of points
-    p -> a point, tuple of z1-coordinates and z2-coordinates
-output:
-    1) a point if there is a horizontal intercept, the interception point
-    2) None otherwise
+	if px == 'OPPO' and py == 'OPPO':
+		s_ndf = s
+		s_r = None
+	else:
+		if px == 'OPPO':
+			px = None
+		if py == 'OPPO':
+			py = None
 
-*** can merge with between_z1
-'''
-def between_z2(s, p):
-    indices = inbetween(p[1], s, 1)
-    if indices is not None:
-        x,y = pointOnSegment(s[indices[0]], s[indices[1]], p[1], 1)
-        if x > p[0]:
-            return (x,y)
-        else:
-            return None
-    else:
-        return None
+		if px is not None:
+			print(s, px, py)
+			index_1 = inbetween(px[1], s, 1)[0]
+			s_ndf = s[:index_1+1]
+			s_ndf.append(px)
 
-'''
-find the interception of a slice and a line segment (made by the current point and the next point)
+		if py is not None:
+			index_2 = inbetween(py[1], s, 1)[1]
+			s_r = [py]
+			s_r.extend(s[index_2:])
 
-input:
-    si -> a slice
-    sj -> another slice, slice j
-    index_j -> index of the current point on slice
-output:
-    1) a point if there is an interception, the intercepting point
-    2) None otherwise
-'''
-def intercept2(si, sj, index_j):
-    if index_j >= len(sj):
-        return None
-    else:
-        pj0 = sj[index_j]
-        pj1 = sj[index_j+1]
-        for i in range(len(si)-1):
-            pi0 = si[i]
-            pi1 = si[i+1]
-            return getIntercept(pi0, pi1, pj0, pj1)
-'''
-split the current slice into non-domindated slice and remaining slice
-
-input:
-    s -> current slice
-    index -> the index of the ending point of a slice segment that px or py is on
-    px -> point resulting from a vertical intercept
-    py -> point resulting from a horizontal intercept
-output:
-    s_ndf: the slice that is part of the non-dominated frontier
-    s_r: the remaining slice
-    None if the inputs are invalid (px and py are both None)
-'''
-def split(s, index, px=None, py=None):
-    s_ndf = None
-    s_r = None
-    if px is not None or py is not None:
-        if px is None:
-            s_r = [py]
-            s_r.append(s[index:])
-        if py is None:
-            i = index - 1
-            s_ndf = s[:i]
-            s_ndf.append(px)
-    return (s_ndf, s_r)
+	return (s_ndf, s_r)
 
 if __name__ == '__main__':
-    getNDF('test.csv')
+	getNDF('test.csv')
 
-
-
+		

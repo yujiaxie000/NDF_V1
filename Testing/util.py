@@ -68,6 +68,7 @@ def inbetween(aNum, aList, mode):
             if aNum <= num[1]:
                 index += 1
     if index == -1 or index >= len(aList)-1:
+        #print(index, aList)
         return None
     else:
         return (index, index+1)
@@ -105,6 +106,9 @@ output:
     b -> incercept of the line
 '''
 def getLineExpression(p0, p1):
+    # print(p0, p1)
+    # if p0 == p1:
+    #     return (0,0)
     x0,y0 = p0
     x1,y1 = p1
     m = (y0-y1)/(x0-x1)
@@ -116,8 +120,6 @@ def getIntercept(pi0, pi1, pj0, pj1):
     xi1,yi1 = pi1
     xj0,yj0 = pj0
     xj1,yj1 = pi1
-    print(pi0, pi1, pj0, pj1)
-    print(max(xi0, xi1), min(xj0, xj1), )
     if max(xi0, xi1) < min(xj0, xj1) or max(xj0, xj1) < min(xi0, xi1):
         return None
     elif max(yi0, yi1) < min(yj0, yj1) or max(yj0, yj1) < min(yi0, yi1):
@@ -125,13 +127,69 @@ def getIntercept(pi0, pi1, pj0, pj1):
     else:
         mi,bi = getLineExpression(pi0, pi1)
         mj,bj = getLineExpression(pj0, pj1)
-        if (mi-mj) < 0.01:
+        if abs(mi-mj) < 0.01:
             return None
         x = (bj-bi)/(mi-mj)
         y = mi*x + bi
-        print(mi, mj)
-        print(x,y)
+
+        if x > max(xi0, xi1) or x < min(xi0, xi1) or y > max(yi0, yi1) or y < min(yi0, yi1):
+            return None
+
         return (x,y)
+    
+def index(L, s):
+    index = L.index(s)
+    return index
+
+# mode == 0: si and sj are both non dominated
+# mode == 1: sj covers si
+# mode == 2: none of the above
+def coverMode(si, sj):
+    if sj[0][0] >= si[-1][0] and sj[0][1] <= si[-1][1]:
+        return 0
+    elif si[0][0] >= sj[-1][0] and si[0][1] <= sj[-1][1]:
+        return 0
+    elif sj[0][0] <= si[0][0] and sj[0][1]>= si[0][1] and sj[-1][0] >= si[-1][0] and sj[-1][1] >= si[-1][1]:
+    #elif sj[0][0] <= si[0][0] and sj[0][1] <= si[-1][1]:
+        return 1
+    else:
+        return 2
+
+# get the number of intercepts and the intercept coordinates of two slices
+def sliceIntercept(si, sj):
+    interceptList = []
+    num = 0
+    #print(len(si)-2)
+    #print(len(sj)-2)
+    sj = list(set(sj))
+    for i in range(len(si) - 1):
+        for j in range(len(sj) - 1):
+            pi0 = si[i]
+            pi1 = si[i+1]
+            pj0 = sj[j]
+            pj1 = sj[j+1]
+
+            intercept = getIntercept(pi0,pi1,pj0,pj1)
+            #print(intercept, [pi0,pi1],[pj0,pj1])
+            #print(intercept, pi0, pi1, pj0, pj1, 'slice')
+            if intercept is not None:
+                num += 1
+                mi = getLineExpression(pi0,pi1)
+                mj = getLineExpression(pj0,pj1)
+                if mi <= mj:
+                    interceptList.append((0, intercept, sj[j]))
+                    #print(intercept, sj[j], 0)
+                else:
+                    interceptList.append((1, intercept, sj[j+1]))
+                    #print(intercept, sj[j+1], 1)
+    return interceptList
+
+
+
+
 
 # if __name__ == '__main__':
-#     processInput('dat.csv')
+#     L = [[(0,0)],[(2,3),(4,5)], [(1,4),(7,8),(10,11)], [(11,11)]]
+#     s = [(2,3),(4,5)]
+#     print(delete(L,s))
+
